@@ -1,110 +1,212 @@
-#!/usr/bin/env python
-# -*-coding:utf-8 -*-
-"""
-@File    :   tennis.py
-@Time    :   2022/11/06 07:51:22
-@Author  :   Jack Tobin
-@Version :   1.0
-@Contact :   tobjack330@gmail.com
-"""
+"""Automated tennis court bookings in Python."""
 
+from __future__ import annotations
 
-from abc import ABC, abstractmethod, abstractproperty
-from selenium import webdriver
-from bs4 import BeautifulSoup
-import requests as re
 import datetime as dt
-import logging as log
+import json
+import logging
+import sys
+from argparse import ArgumentParser
+from dataclasses import dataclass, field
+from enum import Enum
 
+import requests as re
 
 # specify logging level as info
-log.basicConfig(level = log.INFO)
+logging.basicConfig(level=logging.INFO)
+log = logging.getLogger()
+
+
+@dataclass
+class Args:
+    booking_date: dt.date
+    target_time: dt.time
+    location: CourtLocation
+
+
+@dataclass
+class BookingSlot:
+    court_number: int
+    date: dt.date
+    start_time: dt.time
+    end_time: dt.time
+    is_open: bool
+    cost: float
+
+    @property
+    def duration(self) -> float:
+        """Return hours between start and end time."""
+        start_datetime = dt.datetime.combine(self.date, self.start_time)
+        end_datetime = dt.datetime.combine(self.date, self.end_time)
+        return (end_datetime - start_datetime).seconds // 3600
+
+    @property
+    def is_double_slot(self) -> bool:
+        return self.duration >= 2.0
+
+
+class StrEnum(str, Enum):
+    """Generic string enumeration class."""
+
+    @classmethod
+    def get(cls, value: str) -> CourtLocation:
+        """Get the enum that matches a string value."""
+        try:
+            return next(val for val in cls if val == value)
+        except StopIteration:
+            raise RuntimeError('No match for {value} in CourtLocation')
+
+
+class CourtLocation(StrEnum):
+    LYLE = 'lyle'
+    STRATFORD = 'stratford'
+
+
+def parse_args(argv: list[str]) -> Args:
+    parser = ArgumentParser()
+    parser.add_argument(
+        '--booking_date',
+        action='store',
+        dest='booking_date',
+        type=lambda x: dt.datetime.strptime(x, '%Y-%m-%d').date(),
+        default=dt.date.today() + dt.timedelta(days=14),
+        required=False,
+        help='Date to request booking for.'
+    )
+    parser.add_argument(
+        '--target_time',
+        action='store',
+        dest='target_time',
+        type=lambda x: dt.time.fromisoformat(x),
+        default=dt.time.fromisoformat('10:00'),
+        required=False,
+        help='Time in UTC to request booking for. Must be in format HH:MM',
+    )
+    parser.add_argument(
+        '--location',
+        action='store',
+        dest='location',
+        type=lambda x: CourtLocation.get(x),
+        default=CourtLocation.LYLE,
+        required=False,
+        help=('Tennis court location to request. Currently available options are:'
+              '["lyle", "stratford"]')
+    )
+    return Args(**vars(parser.parse_args(argv)))
 
 
 def main() -> int:
     log.info('Initialising tennis reservation bot.')
-    
-    # target reservation date
-    res_date = dt.date.today() + dt.timedelta(days=14)
-    log.info(f'Set target reservation date of: {res_date}')
 
-    # initialize webdriver
-    scheduler = TennisScheduler(reservation_date=res_date, park_location='lyle')
+    args = parse_args(sys.argv[1:])
+    log.info(f'Input arguments: {args}')
 
-    # attempt booking
-    log.info(f'Attempting booking on {scheduler.reservation_date}')
+    scheduler = TennisScheduler(
+        booking_date=args.booking_date,
+        target_time=args.target_time,
+        location=args.location,
+    )
     scheduler.attempt_booking()
-    if scheduler.success:
-        log.info(f'Success! Booking confirmed. Details: {scheduler.response}')
-        return 0
-    else:
-        log.info(f'Booking not confirmed. Details: {scheduler.response}')
-        return 1
+
+    if not scheduler.success:
+        log.info(f'Unable to complete booking request: {scheduler.response}')
+        return -1
+
+    log.info(f'Booking not confirmed. Details: {scheduler.response}')
+    return 1
 
 
-class Scheduler(ABC):
-    def __init__(self):
-        self._browser = None
-        self._url = None
-        self._response = None
+@dataclass
+class TennisScheduler:
 
-        # related to status of booking
-        self.success = False
+    booking_date: dt.date = field(default=dt.date.today() + dt.timedelta(days=14))
+    target_time: dt.time = field(default=dt.time(10, 0))
+    location: CourtLocation = field(default=CourtLocation.LYLE)
 
-    @property
-    def browser(self):
-        """Retrieve web driver."""
-        if not self._browser:
-            self._browser = webdriver.Chrome(executable_path='~/chromedriver.exe')
-        return self._browser
+    include_paid_slots: bool = field(default=False)
+
+    success: bool = field(default=False, init=False)
 
     @property
-    def url(self):
-        return self._url
-
-    @url.setter
-    def url(self, new_url):
-        self._url = new_url
-
-    @abstractmethod
-    def attempt_booking(self):
-        """Abstract method for attempt to make a booking."""
+    def response(self) -> str:
+        return ''
 
     @property
-    def response(self):
-        return self._response
+    def target_time_stamp(self) -> int:
+        """Return target booking time stmap.
 
+        Times returned by API are listed in minutes from midnight.
 
+        """
+        return self.target_time.hour * 60
 
-class TennisScheduler(Scheduler):
-    def __init__(self, reservation_date: dt.date, park_location: str = 'lyle') -> None:
-        """Instantiate class."""
-        super().__init__()
+    def __post_init__(self) -> None:
+        # validate reservation date.
+        if self.booking_date > dt.date.today() + dt.timedelta(days=14):
+            raise RuntimeError('Unable to book reservations greater than 14 days in advance.')
 
-        # set and validate reservation date
-        self.reservation_date = reservation_date
-        max_res_date = dt.date.today() + dt.timedelta(days=14)
-        if self.reservation_date > max_res_date:
-            log.warning(f'Reservation date {self.reservation_date} too far in future; defaulting '
-                        f'to max reservation date of 2 weeks from now ({max_res_date})')
-            self.reservation_date = max_res_date
-        
-        # set and validate park location
-        self.park_location = park_location
-        if self.park_location not in ('lyle', 'stratford'):
-            raise ValueError(f'Park location {self.park_location} not supported.')
-
-        # construct URL
-        self.url = f'https://{park_location}.newhamparkstennis.org.uk/Booking/BookByDate#?date={reservation_date}&role=member'
-
-    @property
-    def response(self):
-        """Response regarding booking confirmed."""
-        return
-
-    def attempt_booking(self):
+    def attempt_booking(self) -> int:
         """Attempt to book reservation."""
 
-if __name__ == '__main__':
-    main()
+        # TODO: how to request authentication via LTA?
 
+        # Construct URL.
+        url = f'https://{self.location}.newhamparkstennis.org.uk/v0/VenueBooking/{self.location}_newhamparkstennis_org_uk/GetVenueSessions?resourceID=&startDate={self.booking_date}&endDate={self.booking_date}&roleId=&_=1688152712056'
+
+        # Get API response.
+        response = re.get(url)
+        if response.status_code != 200:
+            raise RuntimeError(f'Bad request: {response.text}')
+        response_json = json.loads(response.text)
+
+        # Collect all slots.
+        all_slots: list[BookingSlot] = []
+        for court in response_json['Resources']:
+            for day in court['Days']:
+                for session in day['Sessions']:
+                    try:
+                        slot = BookingSlot(
+                            court_number=court['Number'] + 1,
+                            date=dt.datetime.strptime(day['Date'], '%Y-%m-%dT%H:%M:%S').date(),
+                            start_time=dt.time(int(session['StartTime'] / 60), 0),
+                            end_time=dt.time(int(session['EndTime'] / 60), 0),
+                            is_open=session['Capacity'] != 0,
+                            cost=session['MemberPrice'],
+                        )
+                    except Exception:
+                        log.exception('Exception when parsing session')
+                        continue
+                    all_slots.append(slot)
+
+        # Filter out booked slots
+        available_slots = [slot for slot in all_slots if slot.is_open]
+
+        # Filter out slots with cost if we're avoiding those.
+        if not self.include_paid_slots:
+            available_slots = [slot for slot in available_slots if slot.cost == 0]
+
+        if available_slots:
+            log.info(f'Found {len(available_slots)} available slots.')
+        else:
+            log.info(f'No open slots on requested date {self.booking_date}. Exiting.')
+            return -1
+
+
+        # Rank slots
+        # First rank by capacity
+        # Then rank by proximity to start time
+        all_slots = ...
+
+
+
+
+
+
+
+
+
+
+        return 'hello'
+
+if __name__ == '__main__':
+    sys.exit(main())

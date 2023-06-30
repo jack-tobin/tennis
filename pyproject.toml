@@ -1,0 +1,19 @@
+[project]
+name = "tennis"
+version = "0.0.1"
+description = "Tennis court booking bot."
+requires-python = ">=3.10.6"
+
+authors = [
+  {email = "tobjack330@gmail.com"},
+  {name = "Jack Tobin"}
+]
+
+maintainers = [
+  {email = "tobjack330@gmail.com"},
+  {name = "Jack Tobin"}
+]
+
+classifiers = [
+  "Programming Language :: Python"
+]
