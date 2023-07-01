@@ -8,3 +8,6 @@ __pycache__/
 .mypy_cache/
 
 *.json
+
+conf.yml
+conf.yaml
