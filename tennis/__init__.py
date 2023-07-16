@@ -2,7 +2,8 @@
 
 import logging
 from enum import Enum
-
+from pathlib import Path
+import yaml
 
 class StrEnum(str, Enum):
     """String enum class."""
@@ -19,3 +20,7 @@ class StrEnum(str, Enum):
 # specify logging level as info
 logging.basicConfig(level=logging.INFO)
 log = logging.getLogger()
+
+# Configuration.
+with Path('config.yml').open() as f:
+    config = yaml.safe_load(f)
