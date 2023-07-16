@@ -3,10 +3,18 @@
 import logging
 from enum import Enum
 from pathlib import Path
+
 import yaml
 
+
 class StrEnum(str, Enum):
-    """String enum class."""
+    """String enum class.
+
+    String enums are helpful because they standardise a set of string values
+    and also because the instances of the Enum are also strings, enabling
+    any string methods to apply here too.
+
+    """
 
     @classmethod
     def get(cls, value: str) -> str:
@@ -22,5 +30,5 @@ logging.basicConfig(level=logging.INFO)
 log = logging.getLogger()
 
 # Configuration.
-with Path('config.yml').open() as f:
+with Path('conf.yml').open() as f:
     config = yaml.safe_load(f)

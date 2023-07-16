@@ -1,9 +1,0 @@
-
-# package requirements for tennis
-pandas
-numpy
-selenium
-bs4
-requests
-datetime
-

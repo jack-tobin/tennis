@@ -23,18 +23,41 @@ class PaymentResult(StrEnum):
     Declined = 'Declined'
 
     def __bool__(self) -> bool:
-        """Return boolean representation of this enum."""
+        """Return boolean representation of this enum.
+
+        Returns
+        -------
+        bool
+            True if Ok else False.
+
+        """
         return self == self.Ok
 
 
 @dataclass
 class Payment:
-    """Payment class."""
+    """Payment class.
+
+    Parameters
+    ----------
+    amount : float
+        Amount to charge in currency units.
+    card : Card
+        Credit card to charge.
+
+    """
 
     amount: float
     card: Card
 
     def authorize(self) -> PaymentResult:
-        """Authorize payment."""
+        """Authorize payment.
+
+        Returns
+        -------
+        PaymentResult
+            A payment result.
+
+        """
         log.info(f'Charged amount ${self.amount:.2f} to card {self.card}')
         return PaymentResult.Ok

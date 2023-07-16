@@ -24,7 +24,14 @@ class ResponseStatus(StrEnum):
 
     @classmethod
     def from_status_code(cls, status_code: int) -> ResponseStatus:
-        """Return a response status instance from a status code."""
+        """Return a response status instance from a status code.
+
+        Returns
+        -------
+        ResponseStatus
+            Ok if 200, BadRequest if 400, InternalServerError if 500.
+
+        """
         match status_code // 100:
             case 2:
                 return cls.Ok
@@ -38,18 +45,39 @@ class ResponseStatus(StrEnum):
 
 @dataclass
 class ResponseProcessor:
-    """Processor for API responses."""
+    """Processor for API responses.
+
+    Parameters
+    ----------
+    response : Response
+        A python requests library response object.
+
+    """
 
     response: Response
 
     @property
     def data(self) -> dict[str, Any]:
-        """Return json-decoded response text data."""
+        """Return json-decoded response text data.
+
+        Returns
+        -------
+        dict[str, Any]
+            JSON-decoded response text data.
+
+        """
         return loads(self.response.text)
 
     @property
     def status(self) -> ResponseStatus:
-        """Return status enumeration of response."""
+        """Return status enumeration of response.
+
+        Returns
+        -------
+        ResponseStatus
+            Response status Enum instance based on response status code.
+
+        """
         return ResponseStatus.from_status_code(self.response.status_code)
 
     def __str__(self) -> str:
