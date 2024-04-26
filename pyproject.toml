@@ -17,3 +17,7 @@ maintainers = [
 classifiers = [
   "Programming Language :: Python"
 ]
+
+[tool.pyright]
+venvPath = ".venv"
+
